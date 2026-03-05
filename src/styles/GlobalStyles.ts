@@ -18,6 +18,7 @@ const GlobalStyles = createGlobalStyle`
     scrollbar-width: none;
     -ms-overflow-style: none;
     overflow-y: hidden;
+    cursor: none;
   }
 
   body {

@@ -9,6 +9,13 @@ type CursorPeer = {
   color: string;
   x?: number;
   y?: number;
+  angle?: number;
+};
+
+type LocalCursor = {
+  x: number;
+  y: number;
+  angle: number;
 };
 
 type JoinPayload = {
@@ -50,9 +57,15 @@ function toGradient(color: string): [string, string] {
 const SOCKET_URL =
   import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:3000';
 
+function getShortestAngle(current: number, target: number): number {
+  const delta = ((((target - current) % 360) + 540) % 360) - 180;
+  return current + delta;
+}
+
 function LiveCursorOverlay() {
   const [myClientId, setMyClientId] = useState('');
   const [peers, setPeers] = useState<Record<string, CursorPeer>>({});
+  const [myCursor, setMyCursor] = useState<LocalCursor | null>(null);
 
   const socket = useMemo<Socket>(
     () =>
@@ -67,6 +80,8 @@ function LiveCursorOverlay() {
   const profile = useMemo(() => createRandomProfile(), []);
   const frameRef = useRef<number | null>(null);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const previousPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const myAngleRef = useRef(0);
 
   useEffect(() => {
     const onConnect = () => {
@@ -97,6 +112,7 @@ function LiveCursorOverlay() {
             color,
             x: typeof parsed.x === 'number' ? parsed.x : prevPeer?.x,
             y: typeof parsed.y === 'number' ? parsed.y : prevPeer?.y,
+            angle: prevPeer?.angle ?? 0,
           },
         };
       });
@@ -112,17 +128,33 @@ function LiveCursorOverlay() {
         return;
       }
       const clientId = parsed.clientId;
+      const nextX = parsed.x;
+      const nextY = parsed.y;
 
       setPeers((prev) => {
         const current = prev[clientId];
+        const prevX = current?.x;
+        const prevY = current?.y;
+
+        let nextAngle = current?.angle ?? 0;
+        if (typeof prevX === 'number' && typeof prevY === 'number') {
+          const dx = nextX - prevX;
+          const dy = nextY - prevY;
+          const distance = Math.hypot(dx, dy);
+          if (distance > 0.6) {
+            nextAngle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+          }
+        }
+
         return {
           ...prev,
           [clientId]: {
             clientId,
             name: parsed.name ?? current?.name ?? 'Anonymous',
             color: parsed.color ?? current?.color ?? '#333',
-            x: parsed.x,
-            y: parsed.y,
+            x: nextX,
+            y: nextY,
+            angle: nextAngle,
           },
         };
       });
@@ -158,6 +190,22 @@ function LiveCursorOverlay() {
 
     const handlePointerMove = (event: PointerEvent) => {
       const point = { x: event.clientX, y: event.clientY };
+
+      const previousPoint = previousPointerRef.current;
+      let nextAngle = myAngleRef.current;
+      if (previousPoint) {
+        const dx = point.x - previousPoint.x;
+        const dy = point.y - previousPoint.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance > 0.6) {
+          const targetAngle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+          nextAngle = getShortestAngle(myAngleRef.current, targetAngle);
+        }
+      }
+
+      myAngleRef.current = nextAngle;
+      setMyCursor({ x: point.x, y: point.y, angle: nextAngle });
+      previousPointerRef.current = point;
       pointerRef.current = point;
       if (frameRef.current !== null) {
         return;
@@ -168,6 +216,15 @@ function LiveCursorOverlay() {
     const leaveRoom = () => {
       socket.emit('cursor:leave');
     };
+
+    const previousHtmlCursor = document.documentElement.style.cursor;
+    const previousBodyCursor = document.body.style.cursor;
+    const hideCursorStyle = document.createElement('style');
+    hideCursorStyle.setAttribute('data-live-cursor-hide', 'true');
+    hideCursorStyle.textContent = '*, *::before, *::after { cursor: none !important; }';
+    document.head.appendChild(hideCursorStyle);
+    document.documentElement.style.cursor = 'none';
+    document.body.style.cursor = 'none';
 
     window.addEventListener('pointermove', handlePointerMove, { passive: true });
     window.addEventListener('beforeunload', leaveRoom);
@@ -184,6 +241,9 @@ function LiveCursorOverlay() {
       socket.off('cursor:join', onJoin);
       socket.off('cursor:move', onMove);
       socket.off('cursor:leave', onLeave);
+      document.documentElement.style.cursor = previousHtmlCursor;
+      document.body.style.cursor = previousBodyCursor;
+      hideCursorStyle.remove();
       leaveRoom();
       socket.disconnect();
     };
@@ -269,6 +329,46 @@ function LiveCursorOverlay() {
           );
         })()
       ))}
+
+      {myCursor && (
+        <motion.div
+          initial={false}
+          animate={{ x: myCursor.x, y: myCursor.y, rotate: myCursor.angle }}
+          transition={{
+            x: { type: 'spring', bounce: 0.35, damping: 26, stiffness: 360, mass: 0.7, restSpeed: 0.5 },
+            y: { type: 'spring', bounce: 0.35, damping: 26, stiffness: 360, mass: 0.7, restSpeed: 0.5 },
+            rotate: { type: 'spring', stiffness: 300, damping: 24, mass: 0.65 },
+          }}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 25,
+            height: 27,
+            transformOrigin: '50% 50%',
+            willChange: 'transform',
+          }}
+        >
+          <svg width='25' height='27' viewBox='0 0 50 54' fill='none'>
+            <defs>
+              <filter id='self-cursor-shadow' x='0.602397' y='0.952444' width='49.0584' height='52.428' filterUnits='userSpaceOnUse' colorInterpolationFilters='sRGB'>
+                <feFlood floodOpacity='0' result='BackgroundImageFix' />
+                <feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha' />
+                <feOffset dy='2.25825' />
+                <feGaussianBlur stdDeviation='2.25825' />
+                <feComposite in2='hardAlpha' operator='out' />
+                <feColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0' />
+                <feBlend mode='normal' in2='BackgroundImageFix' result='effect1_dropShadow_91_7928' />
+                <feBlend mode='normal' in='SourceGraphic' in2='effect1_dropShadow_91_7928' result='shape' />
+              </filter>
+            </defs>
+            <g filter='url(#self-cursor-shadow)'>
+              <path d='M42.6817 41.1495L27.5103 6.79925C26.7269 5.02557 24.2082 5.02558 23.3927 6.79925L7.59814 41.1495C6.75833 42.9759 8.52712 44.8902 10.4125 44.1954L24.3757 39.0496C24.8829 38.8627 25.4385 38.8627 25.9422 39.0496L39.8121 44.1954C41.6849 44.8902 43.4884 42.9759 42.6817 41.1495Z' fill='black' />
+              <path d='M43.7146 40.6933L28.5431 6.34306C27.3556 3.65428 23.5772 3.69516 22.3668 6.32755L6.57226 40.6778C5.3134 43.4156 7.97238 46.298 10.803 45.2549L24.7662 40.109C25.0221 40.0147 25.2999 40.0156 25.5494 40.1082L39.4193 45.254C42.2261 46.2953 44.9254 43.4347 43.7146 40.6933Z' stroke='white' strokeWidth='2.25825' />
+            </g>
+          </svg>
+        </motion.div>
+      )}
     </div>
   );
 }
