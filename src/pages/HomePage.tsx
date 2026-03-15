@@ -2,12 +2,18 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useInView, useScroll, useMotionValueEvent, useSpring } from 'motion/react';
 import styled from 'styled-components';
+import awardsData from '../data/awards.json';
 
 const INSTAGRAM_URL = 'https://instagram.com/apply_mirim';
 const PROJECT_IMAGE_BASE = 'https://picsum.photos/530/298';
 
 const gray900 = '#171717';
 const primary = '#FFA1BC';
+
+type AwardsByYear = Record<string, string[]>;
+const awardsByYear: AwardsByYear = awardsData as AwardsByYear;
+const awardYears = ['2024', '2025', '2026'] as const;
+type AwardYear = (typeof awardYears)[number];
 
 const PageWrapper = styled.main`
   overflow-y: auto;
@@ -291,6 +297,130 @@ const ProjectRowTrack = styled.div`
   width: 100%;
 `;
 
+const AwardsSection = styled(Section)`
+  background: #FFFBFD;
+  color: #000;
+  display: flex;
+  justify-content: center;
+`;
+
+const AwardsInner = styled.div`
+  width: 100%;
+  max-width: 1200px;
+`;
+
+const AwardsTitle = styled(motion.h2)`
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 2.5rem;
+  font-family: 'Pretendard', sans-serif;
+`;
+
+const PriceCarouselWrapper = styled.div`
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2.5rem;
+  -webkit-overflow-scrolling: touch;
+`;
+
+const PriceRow = styled(motion.div)`
+  display: flex;
+  width: max-content;
+  gap: 38px;
+`;
+
+const PriceCard = styled.div`
+  position: relative;
+  width: 302px;
+  height: 428px;
+  overflow: hidden;
+  flex-shrink: 0;
+`;
+
+const PriceImage = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+`;
+
+const PriceImageOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.25) 40%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+`;
+
+const AwardsFilterRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+`;
+
+const YearTabs = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const YearButtonOuter = styled.span<{ $active: boolean }>`
+  display: inline-block;
+  width: 72px;
+  height: 37px;
+  padding: 2.5px;
+  box-sizing: border-box;
+  background: linear-gradient(to right, #FE227C, #96245D);
+  border-radius: 0;
+  opacity: ${(p) => (p.$active ? 1 : 0.6)};
+`;
+
+const YearButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: ${primary};
+  color: #000;
+  font-weight: 500;
+  font-size: 18px;
+  cursor: pointer;
+  font-family: 'Pretendard', sans-serif;
+  transition: opacity 0.2s ease;
+`;
+
+const AwardsList = styled(motion.ul)`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: 8px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  font-family: 'Pretendard', sans-serif;
+`;
+
+const AwardsItem = styled(motion.li)`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25em;
+`;
+
+const AwardNames = styled.span`
+  font-size: 14px;
+  color: #757575;
+  font-family: 'Pretendard', sans-serif;
+`;
+
 const SectionTitle = styled(motion.h2)`
   font-size: clamp(1.5rem, 3.5vw, 2rem);
   font-weight: 800;
@@ -316,6 +446,12 @@ const QASection = styled(Section)`
   text-align: center;
 `;
 
+function parseAwardLine(text: string): { award: string; names: string } {
+  const match = text.match(/^\[([^\]]+)\]\s*(.*)$/);
+  if (match) return { names: match[1].trim(), award: match[2].trim() };
+  return { names: '', award: text };
+}
+
 function FadeUp({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: '-80px' });
@@ -338,6 +474,7 @@ function FadeUp({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
 const PROJECT_IMAGES_ROW1 = Array.from({ length: 10 }, (_, i) => `${PROJECT_IMAGE_BASE}?random=${i + 1}`);
 const PROJECT_IMAGES_ROW2 = Array.from({ length: 10 }, (_, i) => `${PROJECT_IMAGE_BASE}?random=${i + 20}`);
 const PROJECT_IMAGES_ROW3 = Array.from({ length: 10 }, (_, i) => `${PROJECT_IMAGE_BASE}?random=${i + 40}`);
+const PRICE_CERT_IMAGES = Array.from({ length: 6 }, (_, i) => `/assets/price/${i + 1}.png`);
 
 function HomePage() {
   const pageScrollRef = useRef<HTMLElement>(null);
@@ -359,6 +496,9 @@ function HomePage() {
   const row1X = scrollProgress * -50 * scrollSpeed;
   const row2X = (1 - scrollProgress) * -50 * scrollSpeed;
   const row3X = scrollProgress * -50 * scrollSpeed;
+
+  const [activeYear, setActiveYear] = useState<AwardYear>('2026');
+  const activeAwards = awardsByYear[activeYear] ?? [];
 
   return (
     <PageWrapper ref={pageScrollRef}>
@@ -527,6 +667,80 @@ function HomePage() {
           </ProjectRowTrack>
         </ProjectsScrollSection>
       </ProjectsSection>
+
+      <AwardsSection id="price">
+        <AwardsInner
+          as={motion.div}
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-80px' }}
+          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <FadeUp>
+            <AwardsTitle>PRICE &amp; ACTIVITY</AwardsTitle>
+          </FadeUp>
+          <FadeUp delay={0.1}>
+            <PriceCarouselWrapper>
+              <PriceRow
+                animate={{ x: ['0%', '-50%'] }}
+                transition={{ repeat: Infinity, duration: 40, ease: 'linear' }}
+              >
+                {PRICE_CERT_IMAGES.map((src, i) => (
+                  <PriceCard key={`price-${i}`}>
+                    <PriceImage src={src} alt="" />
+                    <PriceImageOverlay />
+                  </PriceCard>
+                ))}
+                {PRICE_CERT_IMAGES.map((src, i) => (
+                  <PriceCard key={`price-dup-${i}`}>
+                    <PriceImage src={src} alt="" />
+                    <PriceImageOverlay />
+                  </PriceCard>
+                ))}
+              </PriceRow>
+            </PriceCarouselWrapper>
+          </FadeUp>
+          <FadeUp delay={0.2}>
+            <AwardsFilterRow>
+              <YearTabs>
+                {awardYears.map((year) => (
+                  <YearButtonOuter key={year} $active={activeYear === year}>
+                    <YearButton type="button" onClick={() => setActiveYear(year)}>
+                      {year}
+                    </YearButton>
+                  </YearButtonOuter>
+                ))}
+              </YearTabs>
+              <AwardsList
+                key={activeYear}
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: {},
+                  visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } },
+                }}
+              >
+                {activeAwards.map((text, idx) => {
+                  const { award, names } = parseAwardLine(text);
+                  return (
+                    <AwardsItem
+                      key={`${activeYear}-${idx}`}
+                      variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        visible: { opacity: 1, y: 0 },
+                      }}
+                      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      {award}
+                      {names ? <AwardNames> {names}</AwardNames> : null}
+                    </AwardsItem>
+                  );
+                })}
+              </AwardsList>
+            </AwardsFilterRow>
+          </FadeUp>
+        </AwardsInner>
+      </AwardsSection>
 
       <QASection id="qa">
         <FadeUp>
