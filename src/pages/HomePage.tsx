@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, useInView, useScroll, useMotionValueEvent, useSpring } from 'motion/react';
 import styled from 'styled-components';
 import awardsData from '../data/awards.json';
+import { ExperienceSection } from '../sections/ExperienceSection';
 
 const INSTAGRAM_URL = 'https://instagram.com/apply_mirim';
 const PROJECT_IMAGE_BASE = 'https://picsum.photos/530/298';
@@ -394,13 +395,13 @@ const YearButton = styled.button`
   transition: opacity 0.2s ease;
 `;
 
-const AwardsList = styled(motion.ul)`
+const AwardsList = styled(motion.ul)<{ $columns: number }>`
   list-style: none;
   padding: 0;
   margin: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(${(p) => p.$columns}, minmax(0, 1fr));
   column-gap: 32px;
   row-gap: 8px;
   font-size: 0.9rem;
@@ -713,6 +714,7 @@ function HomePage() {
               </YearTabs>
               <AwardsList
                 key={activeYear}
+                $columns={activeYear === '2026' ? 1 : 2}
                 initial="hidden"
                 animate="visible"
                 variants={{
@@ -741,6 +743,8 @@ function HomePage() {
           </FadeUp>
         </AwardsInner>
       </AwardsSection>
+
+      <ExperienceSection />
 
       <QASection id="qa">
         <FadeUp>
